@@ -16,11 +16,17 @@ function cleanConnectionString(raw) {
   }
 }
 
-// Если скачали CA-сертификат Aiven (ca.pem) — укажите путь в .env: DB_CA_PATH=./ca.pem (проверка включится).
-// Без него соединение шифруется, но сертификат не проверяется (для учебного проекта это нормально).
-const ssl = process.env.DB_CA_PATH
-  ? { ca: fs.readFileSync(process.env.DB_CA_PATH, 'utf8'), rejectUnauthorized: true }
-  : { rejectUnauthorized: false };
+// SSL включается автоматически для облачной БД (Aiven) и выключается для локального PostgreSQL —
+// у локального сервера SSL обычно нет, и тогда ошибка "The server does not support SSL connections".
+// Принудительно: DB_SSL=true или DB_SSL=false в .env.
+// Если скачали CA-сертификат Aiven (ca.pem) — укажите путь: DB_CA_PATH=./ca.pem (тогда сертификат проверяется).
+const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(process.env.DATABASE_URL || '');
+const useSsl = process.env.DB_SSL ? process.env.DB_SSL.toLowerCase() === 'true' : !isLocal;
+const ssl = !useSsl
+  ? false
+  : process.env.DB_CA_PATH
+    ? { ca: fs.readFileSync(process.env.DB_CA_PATH, 'utf8'), rejectUnauthorized: true }
+    : { rejectUnauthorized: false };
 
 const pool = new Pool({
   connectionString: cleanConnectionString(process.env.DATABASE_URL),
