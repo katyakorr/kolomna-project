@@ -45,8 +45,11 @@ body.is-map .footer{display:none}
 .media:before,.media:after{content:"";height:1px;background:#d0d0cc;position:absolute;width:130%;transform:rotate(25deg)}
 .media:after{transform:rotate(-25deg)}
 .media>span{background:var(--fill);padding:5px 13px;z-index:1;font-size:12px;text-transform:uppercase;letter-spacing:1px;text-align:center}
-.media.has-img:before,.media.has-img:after{display:none}
 .media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+/* Скрываем всё лишнее, если картинка загружена */
+.media.has-img:before,.media.has-img:after{display:none}
+.media.has-img>span{display:none}
 
 /* главная */
 .hero{display:grid;grid-template-columns:1fr 1fr;min-height:520px;gap:70px;padding-top:65px;padding-bottom:65px;align-items:center}
