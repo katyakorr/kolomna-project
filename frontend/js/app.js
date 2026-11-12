@@ -1,3 +1,4 @@
+// скорее всего где то пять что то не так как расчет общего времени
 const app = document.getElementById('app');
 let mapInstance = null;
 let placesLayer = null;
@@ -17,10 +18,10 @@ function placeImage(place) {
     return place && (place.image_url || place.photo_url || place.image || place.photo) || '';
 }
 
-// Заглушка изображения как в вайрфреймах (или реальное фото, если оно есть в базе)
+// Заглушка изображения (или реальное фото)
 function media(label, height, src) {
-    const img = src ? `<img src="${esc(src)}" alt="${esc(label)}" loading="lazy">` : '';
-    return `<div class="media ${src ? 'has-img' : ''}" style="height:${height}px">${img}${src ? '' : `<span>${esc(label)}</span>`}</div>`;
+    const img = src ? `<img src="${esc(src)}" alt="${esc(label)}" loading="lazy" onerror="this.parentNode.classList.remove('has-img');this.remove()">` : '';
+    return `<div class="media ${src ? 'has-img' : ''}" style="height:${height}px">${img}<span>${esc(label)}</span></div>`;
 }
 
 function fmtDuration(min) {
@@ -40,13 +41,6 @@ function fmtTime(t) {
     return t ? String(t).slice(0, 5) : '';
 }
 
-function shorten(text, max = 140) {
-    const s = String(text || '').trim();
-    if (s.length <= max) return s;
-    return s.slice(0, max).replace(/\s+\S*$/, '') + '…';
-}
-
-// Расстояние между двумя точками, метры
 function distanceM(a, b) {
     const R = 6371000, rad = x => x * Math.PI / 180;
     const dLat = rad(b.latitude - a.latitude), dLon = rad(b.longitude - a.longitude);
@@ -55,7 +49,7 @@ function distanceM(a, b) {
 }
 
 function walkText(a, b) {
-    const m = Math.round(distanceM(a, b) * 1.2 / 10) * 10; // поправка на изгибы улиц
+    const m = Math.round(distanceM(a, b) * 1.2 / 10) * 10;
     const mins = Math.max(1, Math.round(m / 80));
     const dist = m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} км` : `${m} м`;
     return `≈ ${mins} мин · ${dist}`;
@@ -64,13 +58,16 @@ function walkText(a, b) {
 function routeCard(r) {
     return `
         <article class="route-card">
-            ${media('Обложка маршрута', 215, r.image_url || r.cover)}
+            ${media('Обложка маршрута', 215, r.image_url)}
             <div class="tags">${esc(r.category || r.season || 'Маршрут')}</div>
             <h3><a href="#route/${r.id}">${esc(r.name)}</a></h3>
-            <p>${esc(shorten(r.description, 120))}</p>
+            
+            <!-- Разрешаем HTML в описании маршрута на карточке, но обрезаем по словам -->
+            <p>${r.description ? r.description.substring(0, 120) + '...' : ''}</p>
+            
             <div class="meta">
                 ${r.total_minutes ? `<span>◷ ${fmtDuration(r.total_minutes)}</span>` : ''}
-                <span>↗ ${fmtKm(r.length_km)}</span>
+                ${r.length_km ? `<span>↗ ${fmtKm(r.length_km)}</span>` : ''}${r.points_count ? `<span>● ${r.points_count} ост.</span>` : ''}
             </div>
             <a class="text-button" href="#route/${r.id}">Подробнее о маршруте ↗</a>
         </article>`;
@@ -93,7 +90,7 @@ function renderHome() {
                 <div style="margin-top:20px"><a class="text-button" href="#catalog">Выбрать маршрут ↗</a></div>
             </div>
             <div>
-                ${media('Главная фотография Коломны', 400)}
+                ${media('Главная фотография Коломны', 420, 'media/hero.jpg')}
                 <div class="hero-index"><span>Атмосфера города</span><span>01 / Главная</span></div>
             </div>
         </section>
@@ -107,8 +104,8 @@ function renderHome() {
                 </div>
             </div>
             <div class="about-media">
-                ${media('Фотография города / архитектура', 340)}
-                ${media('Деталь / атмосфера', 230)}
+                ${media('Фотография города / архитектура', 340, 'media/about-1.jpg')}
+                ${media('Деталь / атмосфера', 240, 'media/about-2.jpg')}
             </div>
         </section>
 
@@ -188,6 +185,11 @@ async function renderRoutePage(id) {
 
     const points = route.points || [];
     const first = points[0], last = points[points.length - 1];
+    if (!route.length_km && points.length > 1) {
+        let m = 0;
+        for (let i = 1; i < points.length; i++) m += distanceM(points[i - 1], points[i]) * 1.2;
+        route.length_km = (Math.round(m / 100) / 10);
+    }
 
     const stopsHtml = points.length ? points.map((point, index) => {
         const place = point.place || {};
@@ -204,7 +206,10 @@ async function renderRoutePage(id) {
                         <div class="stop-time">${esc(label)}${time ? ' · ' + esc(time) : ''}</div>
                         ${isPartner ? '<span class="badge">Партнёр</span>' : ''}
                         <h3>${esc(point.name)}</h3>
-                        ${place.description ? `<p>${esc(shorten(place.description, 110))}</p>` : ''}
+                        
+                        <!-- Разрешаем HTML в описании остановки, обрезаем для краткости -->
+                        ${place.description ? `<div class="rich-text" style="font-size:14px; color:#5b7063;">${place.description.substring(0, 110)}...</div>` : ''}
+                        
                         <a class="text-button" href="#place/${point.place_id}">${isPartner ? 'Посмотреть предложение' : 'Подробнее о месте'} ↗</a>
                     </div>
                 </div>
@@ -223,24 +228,32 @@ async function renderRoutePage(id) {
             <div>
                 <div class="eyebrow">${esc(route.category || route.season || 'Маршрут')} / Маршрут</div>
                 <h1>${esc(route.name)}</h1>
-                <p class="lead">${esc(shorten(route.description, 150))}</p>
+                
+                <!-- HTML в кратком описании маршрута -->
+                <div class="lead rich-text">${route.description || ''}</div>
+                
                 <div class="facts">
                     <div><span class="value">${fmtDuration(route.total_minutes)}</span><span class="label">Длительность</span></div>
                     <div><span class="value">${fmtKm(route.length_km)}</span><span class="label">Расстояние</span></div>
                     <div><span class="value">${points.length}</span><span class="label">Остановок</span></div>
-                    <div><span class="value">${esc(route.season || '—')}</span><span class="label">Сезонность</span></div>
+                    <div><span class="value">${esc(route.category || route.season || '—')}</span><span class="label">Тема</span></div>
                 </div>
                 ${yandexUrl ? `<a class="button dark" href="${yandexUrl}" target="_blank" rel="noopener">Открыть прогулку в Яндекс.Картах <span class="arrow">↗</span></a>
                 <p class="hero-note">Пеший маршрут через остановки.</p>` : ''}
             </div>
-            ${media('Обложка маршрута', 360, route.image_url || route.cover)}
+            ${media('Обложка маршрута', 360, route.image_url)}
         </section>
 
         <div class="narrow">
             <section class="article-section">
                 <div class="eyebrow">Перед прогулкой</div>
                 <h2>О маршруте</h2>
-                <p>${esc(route.description || 'Подробное описание прогулки появится позже.')}</p>
+                
+                <!-- Полный HTML-текст маршрута -->
+                <div class="rich-text">
+                    ${route.description || 'Подробное описание прогулки появится позже.'}
+                </div>
+                
                 ${first && last ? `
                 <div class="start-end">
                     <div><span class="field-label">Начало</span><strong>${esc(first.name)}</strong></div>
@@ -270,11 +283,6 @@ async function renderPlacePage(id) {
     const place = await fetchPlaceDetails(id);
     if (!place) { app.innerHTML = `<div class="wrap section"><h1>Место не найдено</h1><a class="text-button" href="#map">К карте ↗</a></div>`; return; }
 
-    const factLines = String(place.facts || '').split('\n').map(s => s.trim()).filter(Boolean);
-    const factsHtml = factLines.length > 1
-        ? `<ul>${factLines.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`
-        : `<p>${esc(factLines[0] || 'Здесь разместятся короткие факты и детали, которые помогут лучше рассмотреть место во время прогулки.')}</p>`;
-
     app.innerHTML = `
     <div class="wrap">
         <div class="breadcrumb"><a href="#map">← К карте</a> <span>/</span> <span>${esc(place.name)}</span></div>
@@ -282,7 +290,10 @@ async function renderPlacePage(id) {
             <div>
                 <div class="eyebrow">${esc(place.type_name || place.place_type || 'Достопримечательность')}</div>
                 <h1>${esc(place.name)}</h1>
-                <p class="lead">${esc(shorten(place.description, 170) || 'Описание пока не добавлено.')}</p>
+                
+                <!-- HTML в кратком описании -->
+                <div class="lead rich-text">${place.description || 'Описание пока не добавлено.'}</div>
+                
                 <p class="field-label">Адрес</p>
                 <p class="field-value">${esc(place.address || 'Адрес уточняется')}</p>
                 <a href="https://yandex.ru/maps/?text=${encodeURIComponent(place.name + ' Коломна')}" target="_blank" rel="noopener" class="button">Открыть в Яндекс.Картах <span class="arrow">↗</span></a>
@@ -294,10 +305,20 @@ async function renderPlacePage(id) {
             <section class="article-section">
                 <div class="eyebrow">Знакомство с местом</div>
                 <h2>История и особенности</h2>
-                <p>${esc(place.description || 'Здесь будет полный текст о выбранном месте.')}</p>
+                
+                <!-- Полный HTML-текст описания места -->
+                <div class="rich-text">
+                    ${place.description || 'Здесь будет полный текст о выбранном месте.'}
+                </div>
+                
                 <div class="photo-pair">
-                    ${media('Фотография / общий план', 190)}
-                    ${media('Деталь', 190)}
+                    ${media('Фотография / общий план', 190, place.image_2_url)}
+                    <div class="fact-card" style="background:var(--green-100); padding:24px; border:1px solid var(--line); display:flex; flex-direction:column; justify-content:center;">
+                        <div class="eyebrow" style="margin-bottom:10px;">Интересный факт</div>
+                        <div class="rich-text" style="font-size:15px; margin:0; color:var(--green-900); line-height:1.5;">
+                            ${place.facts || 'Здесь будет размещен интересный факт об этом месте.'}
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -315,11 +336,6 @@ async function renderPlacePage(id) {
                     </div>
                 </div>`}
                 <p class="model-note">${place.model_3d ? 'Вращайте модель и приближайте её жестами или колесом мыши.' : 'Заглушка модели. В готовой версии: вращение и приближение.'}</p>
-            </section>
-
-            <section class="article-section attention">
-                <h2>На что обратить внимание</h2>
-                ${factsHtml}
             </section>
         </div>
 
@@ -347,13 +363,13 @@ async function loadCatalogRoutes() {
     const container = document.getElementById('catalog-routes');
     if (!container) return;
     const panel = document.getElementById('catalog-filters');
-    const seasons = uniq(routes.map(r => r.season));
+    const seasons = uniq(routes.map(r => r.category || r.season));
 
     const draw = () => {
-        const list = catalogSeason ? routes.filter(r => r.season === catalogSeason) : routes;
+        const list = catalogSeason ? routes.filter(r => (r.category || r.season) === catalogSeason) : routes;
         document.getElementById('catalog-found').textContent = `Найдено: ${list.length}`;
         container.innerHTML = list.length ? list.map(routeCard).join('') : '<p class="empty">По выбранным фильтрам ничего не найдено.</p>';
-        panel.innerHTML = [['', 'Все сезоны'], ...seasons.map(s => [s, s])]
+        panel.innerHTML = [['', 'Все'], ...seasons.map(s => [s, s])]
             .map(([v, label]) => `<button class="chip ${catalogSeason === v ? 'active' : ''}" data-season="${esc(v)}">${esc(label)}</button>`).join('');
         panel.querySelectorAll('.chip').forEach(btn => btn.onclick = () => { catalogSeason = btn.dataset.season; draw(); });
     };
@@ -383,7 +399,6 @@ function pinIcon(label, number) {
     });
 }
 
-// Блок 3D-модели: если в БД указан файл (колонка model_3d) — показываем модель, иначе заглушка
 function modelBlock(modelSrc, height) {
     if (modelSrc) {
         return `<model-viewer src="${esc(modelSrc)}" camera-controls auto-rotate touch-action="pan-y" style="width:100%;height:${height}px;background:#f4f4f2"></model-viewer>`;
@@ -420,7 +435,7 @@ async function initMap() {
 async function drawAllPlacesOnMap() {
     const map = mapInstance;
     const places = await fetchPlaces();
-    if (!map || map !== mapInstance) return; // пользователь уже ушёл со страницы
+    if (!map || map !== mapInstance) return;
     placesLayer = L.layerGroup();
     const bounds = [];
     places.filter(p => p.latitude != null && p.longitude != null).forEach(place => {
@@ -433,7 +448,6 @@ async function drawAllPlacesOnMap() {
     else if (bounds.length === 1) map.setView(bounds[0], 15);
 }
 
-// Пеший маршрут по реальным улицам (OpenStreetMap foot routing). Если сервис недоступен — остаётся прямая линия.
 const walkCache = {};
 async function getWalkPath(latlngs) {
     if (latlngs.length < 2) return null;
@@ -465,7 +479,6 @@ async function showRouteOnMap(routeId) {
     const latlngs = detail.points.map(p => [Number(p.latitude), Number(p.longitude)]);
     const line = L.polyline(latlngs, { color: '#252525', weight: 3, dashArray: '8, 8', opacity: .9 }).addTo(routeLayer);
     const thisLayer = routeLayer;
-    // Пешеходный путь по улицам вместо прямых линий между точками
     getWalkPath(latlngs).then(path => {
         if (path && routeLayer === thisLayer && mapInstance) {
             line.setLatLngs(path);
@@ -492,7 +505,7 @@ async function loadMapSidebar() {
     const items = isPlaces ? await fetchPlaces() : await fetchRoutes();
     if (!document.getElementById('map-sidebar-list')) return;
 
-    const keyOf = i => isPlaces ? (i.type_name || i.place_type) : i.season;
+    const keyOf = i => isPlaces ? (i.type_name || i.place_type) : (i.category || i.season);
     const options = uniq(items.map(keyOf));
     const selected = isPlaces ? mapPlaceType : mapSeason;
 
@@ -528,7 +541,7 @@ async function loadMapSidebar() {
             card.dataset.route = item.id;
             if (String(item.id) === String(activeRouteId)) card.classList.add('active');
             card.innerHTML = `
-                ${media('Обложка', 68, item.image_url || item.cover)}
+                ${media('Обложка', 68, item.image_url)}
                 <div>
                     <h3>${esc(item.name)}</h3>
                     <p>${[item.total_minutes ? fmtDuration(item.total_minutes) : '', fmtKm(item.length_km)].filter(x => x && x !== '—').join(' · ') || esc(item.season || '')}</p>
@@ -575,7 +588,6 @@ function router() {
         loadCatalogRoutes();
         window.scrollTo(0, 0);
     } else {
-        // #home, #about, #home/about
         const toAbout = hash === '#about' || hash === '#home/about';
         setActiveNav(toAbout ? 'about' : '');
         app.innerHTML = renderHome();
