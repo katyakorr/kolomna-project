@@ -1,4 +1,3 @@
-// скорее всего где то пять что то не так как расчет общего времени
 const app = document.getElementById('app');
 let mapInstance = null;
 let placesLayer = null;
@@ -62,7 +61,6 @@ function routeCard(r) {
             <div class="tags">${esc(r.category || r.season || 'Маршрут')}</div>
             <h3><a href="#route/${r.id}">${esc(r.name)}</a></h3>
             
-            <!-- Разрешаем HTML в описании маршрута на карточке, но обрезаем по словам -->
             <p>${r.description ? r.description.substring(0, 120) + '...' : ''}</p>
             
             <div class="meta">
@@ -207,7 +205,6 @@ async function renderRoutePage(id) {
                         ${isPartner ? '<span class="badge">Партнёр</span>' : ''}
                         <h3>${esc(point.name)}</h3>
                         
-                        <!-- Разрешаем HTML в описании остановки, обрезаем для краткости -->
                         ${place.description ? `<div class="rich-text" style="font-size:14px; color:#5b7063;">${place.description.substring(0, 110)}...</div>` : ''}
                         
                         <a class="text-button" href="#place/${point.place_id}">${isPartner ? 'Посмотреть предложение' : 'Подробнее о месте'} ↗</a>
@@ -229,7 +226,6 @@ async function renderRoutePage(id) {
                 <div class="eyebrow">${esc(route.category || route.season || 'Маршрут')} / Маршрут</div>
                 <h1>${esc(route.name)}</h1>
                 
-                <!-- HTML в кратком описании маршрута -->
                 <div class="lead rich-text">${route.description || ''}</div>
                 
                 <div class="facts">
@@ -249,9 +245,8 @@ async function renderRoutePage(id) {
                 <div class="eyebrow">Перед прогулкой</div>
                 <h2>О маршруте</h2>
                 
-                <!-- Полный HTML-текст маршрута -->
                 <div class="rich-text">
-                    ${route.description || 'Подробное описание прогулки появится позже.'}
+                    ${route.description || ''}
                 </div>
                 
                 ${first && last ? `
@@ -283,6 +278,11 @@ async function renderPlacePage(id) {
     const place = await fetchPlaceDetails(id);
     if (!place) { app.innerHTML = `<div class="wrap section"><h1>Место не найдено</h1><a class="text-button" href="#map">К карте ↗</a></div>`; return; }
 
+    // Разбиваем текст описания на абзацы для верхней части и для низа (без заглушек)
+    const descriptionParts = (place.description || '').split('</p>');
+    const firstParagraph = descriptionParts[0] ? descriptionParts[0].replace('<p>', '') + '.' : '';
+    const restOfText = descriptionParts.slice(1).join('</p>');
+
     app.innerHTML = `
     <div class="wrap">
         <div class="breadcrumb"><a href="#map">← К карте</a> <span>/</span> <span>${esc(place.name)}</span></div>
@@ -291,8 +291,7 @@ async function renderPlacePage(id) {
                 <div class="eyebrow">${esc(place.type_name || place.place_type || 'Достопримечательность')}</div>
                 <h1>${esc(place.name)}</h1>
                 
-                <!-- HTML в кратком описании -->
-                <div class="lead rich-text">${place.description || 'Описание пока не добавлено.'}</div>
+                ${firstParagraph ? `<div class="lead rich-text">${firstParagraph}</div>` : ''}
                 
                 <p class="field-label">Адрес</p>
                 <p class="field-value">${esc(place.address || 'Адрес уточняется')}</p>
@@ -306,20 +305,20 @@ async function renderPlacePage(id) {
                 <div class="eyebrow">Знакомство с местом</div>
                 <h2>История и особенности</h2>
                 
-                <!-- Полный HTML-текст описания места -->
-                <div class="rich-text">
-                    ${place.description || 'Здесь будет полный текст о выбранном месте.'}
+                <div style="margin: 30px 0;">
+                    ${media('Фотография / общий план', 340, place.image_2_url)}
                 </div>
+
+                ${restOfText ? `<div class="rich-text">${restOfText}</div>` : ''}
                 
-                <div class="photo-pair">
-                    ${media('Фотография / общий план', 190, place.image_2_url)}
-                    <div class="fact-card" style="background:var(--green-100); padding:24px; border:1px solid var(--line); display:flex; flex-direction:column; justify-content:center;">
-                        <div class="eyebrow" style="margin-bottom:10px;">Интересный факт</div>
-                        <div class="rich-text" style="font-size:15px; margin:0; color:var(--green-900); line-height:1.5;">
-                            ${place.facts || 'Здесь будет размещен интересный факт об этом месте.'}
-                        </div>
+                ${place.facts ? `
+                <div style="background:var(--soft); padding:24px 30px; margin-top:40px; border-left:3px solid var(--ink);">
+                    <div class="eyebrow" style="margin-bottom:10px;">Интересные факты</div>
+                    <div class="rich-text" style="margin:0;">
+                        ${place.facts}
                     </div>
                 </div>
+                ` : ''}
             </section>
 
             <section class="article-section">
