@@ -36,22 +36,11 @@ function fmtKm(km) {
     return `${String(km).replace('.', ',')} км`;
 }
 
-function fmtTime(t) {
-    return t ? String(t).slice(0, 5) : '';
-}
-
 function distanceM(a, b) {
     const R = 6371000, rad = x => x * Math.PI / 180;
     const dLat = rad(b.latitude - a.latitude), dLon = rad(b.longitude - a.longitude);
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLon / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-function walkText(a, b) {
-    const m = Math.round(distanceM(a, b) * 1.2 / 10) * 10;
-    const mins = Math.max(1, Math.round(m / 80));
-    const dist = m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} км` : `${m} м`;
-    return `≈ ${mins} мин · ${dist}`;
 }
 
 function routeCard(r) {
@@ -183,6 +172,8 @@ async function renderRoutePage(id) {
 
     const points = route.points || [];
     const first = points[0], last = points[points.length - 1];
+    
+    // Если длина не задана в БД, считаем примерно по прямой
     if (!route.length_km && points.length > 1) {
         let m = 0;
         for (let i = 1; i < points.length; i++) m += distanceM(points[i - 1], points[i]) * 1.2;
@@ -193,7 +184,10 @@ async function renderRoutePage(id) {
         const place = point.place || {};
         const isPartner = place.is_partner === true || /партн/i.test(String(place.place_type || place.type_name || ''));
         const label = index === 0 ? 'Начало прогулки' : (index === points.length - 1 && points.length > 2 ? 'Завершение' : `Остановка ${index + 1}`);
-        const time = [fmtTime(point.arrival_time) && `прибытие ${fmtTime(point.arrival_time)}`, point.stay_minutes && `${point.stay_minutes} мин`].filter(Boolean).join(' · ');
+        
+        // Показываем ТОЛЬКО время стоянки, без времени прибытия
+        const time = point.stay_minutes ? `Стоянка: ${point.stay_minutes} мин` : '';
+        
         const next = points[index + 1];
         return `
             <article class="stop">
@@ -210,7 +204,7 @@ async function renderRoutePage(id) {
                         <a class="text-button" href="#place/${point.place_id}">${isPartner ? 'Посмотреть предложение' : 'Подробнее о месте'} ↗</a>
                     </div>
                 </div>
-                ${next ? `<div class="walk">↓ Пеший переход · ${walkText(point, next)}</div>` : ''}
+                ${next ? `<div class="walk">↓ Пеший переход</div>` : ''}
             </article>`;
     }).join('') : '<p class="empty">В этом маршруте пока нет точек.</p>';
 
@@ -278,7 +272,7 @@ async function renderPlacePage(id) {
     const place = await fetchPlaceDetails(id);
     if (!place) { app.innerHTML = `<div class="wrap section"><h1>Место не найдено</h1><a class="text-button" href="#map">К карте ↗</a></div>`; return; }
 
-    // Разбиваем текст описания на абзацы для верхней части и для низа (без заглушек)
+    // Разбиваем текст описания на абзацы для верхней части и для низа
     const descriptionParts = (place.description || '').split('</p>');
     const firstParagraph = descriptionParts[0] ? descriptionParts[0].replace('<p>', '') + '.' : '';
     const restOfText = descriptionParts.slice(1).join('</p>');
