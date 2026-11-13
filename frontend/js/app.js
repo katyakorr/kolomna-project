@@ -173,7 +173,6 @@ async function renderRoutePage(id) {
     const points = route.points || [];
     const first = points[0], last = points[points.length - 1];
     
-    // Если длина не задана в БД, считаем примерно по прямой
     if (!route.length_km && points.length > 1) {
         let m = 0;
         for (let i = 1; i < points.length; i++) m += distanceM(points[i - 1], points[i]) * 1.2;
@@ -185,7 +184,6 @@ async function renderRoutePage(id) {
         const isPartner = place.is_partner === true || /партн/i.test(String(place.place_type || place.type_name || ''));
         const label = index === 0 ? 'Начало прогулки' : (index === points.length - 1 && points.length > 2 ? 'Завершение' : `Остановка ${index + 1}`);
         
-        // Показываем ТОЛЬКО время стоянки, без времени прибытия
         const time = point.stay_minutes ? `Стоянка: ${point.stay_minutes} мин` : '';
         
         const next = points[index + 1];
@@ -228,8 +226,13 @@ async function renderRoutePage(id) {
                     <div><span class="value">${points.length}</span><span class="label">Остановок</span></div>
                     <div><span class="value">${esc(route.category || route.season || '—')}</span><span class="label">Тема</span></div>
                 </div>
-                ${yandexUrl ? `<a class="button dark" href="${yandexUrl}" target="_blank" rel="noopener">Открыть прогулку в Яндекс.Картах <span class="arrow">↗</span></a>
-                <p class="hero-note">Пеший маршрут через остановки.</p>` : ''}
+                
+                ${yandexUrl ? `<a class="button dark" href="${yandexUrl}" target="_blank" rel="noopener" style="margin-bottom:12px; display:inline-flex;">Открыть прогулку в Яндекс.Картах <span class="arrow">↗</span></a>
+                <p class="hero-note" style="margin-top:0;">Пеший маршрут через остановки.</p>` : ''}
+                
+                <button class="button light" onclick="buildRouteFromHotel(${route.id})" style="display:block; margin-top:15px;">
+                    Построить маршрут от гостиницы <span class="arrow">↗</span>
+                </button>
             </div>
             ${media('Обложка маршрута', 360, route.image_url)}
         </section>
@@ -272,10 +275,12 @@ async function renderPlacePage(id) {
     const place = await fetchPlaceDetails(id);
     if (!place) { app.innerHTML = `<div class="wrap section"><h1>Место не найдено</h1><a class="text-button" href="#map">К карте ↗</a></div>`; return; }
 
-    // Разбиваем текст описания на абзацы для верхней части и для низа
     const descriptionParts = (place.description || '').split('</p>');
     const firstParagraph = descriptionParts[0] ? descriptionParts[0].replace('<p>', '') + '.' : '';
     const restOfText = descriptionParts.slice(1).join('</p>');
+    
+    // Проверяем, является ли это место гостиницей, чтобы скрыть лишние блоки
+    const isHotel = place.name.toLowerCase().includes('гостиница');
 
     app.innerHTML = `
     <div class="wrap">
@@ -294,6 +299,8 @@ async function renderPlacePage(id) {
             ${media('Главная фотография места', 360, placeImage(place))}
         </section>
 
+        <!-- Если это НЕ гостиница, показываем все блоки ниже -->
+        ${!isHotel ? `
         <div class="place-body">
             <section class="article-section">
                 <div class="eyebrow">Знакомство с местом</div>
@@ -331,6 +338,7 @@ async function renderPlacePage(id) {
                 <p class="model-note">${place.model_3d ? 'Вращайте модель и приближайте её жестами или колесом мыши.' : 'Заглушка модели. В готовой версии: вращение и приближение.'}</p>
             </section>
         </div>
+        ` : ''}
 
         <section class="place-end">
             <div>
@@ -384,11 +392,21 @@ window.switchMapTab = function (tab) {
     loadMapSidebar();
 };
 
+// Обычный маркер (круглый)
 function pinIcon(label, number) {
     return L.divIcon({
         className: 'custom-pin',
         html: `<div class="pin"><div class="pin-dot ${number ? 'num' : ''}">${number || ''}</div>${label ? `<div class="pin-label">${esc(label)}</div>` : ''}</div>`,
         iconSize: [26, 26], iconAnchor: [13, 13]
+    });
+}
+
+// Маркер гостиницы (квадратный, темный)
+function hotelIcon(label) {
+    return L.divIcon({
+        className: 'custom-pin',
+        html: `<div class="pin"><div class="pin-dot" style="border-radius:0; background:#252525; border-color:#fff; width:24px; height:24px; display:flex; align-items:center; justify-content:center;"><span style="color:white; font-weight:bold; font-size:14px;">H</span></div>${label ? `<div class="pin-label" style="background:#252525; color:#fff;">${esc(label)}</div>` : ''}</div>`,
+        iconSize: [24, 24], iconAnchor: [12, 12]
     });
 }
 
@@ -400,6 +418,16 @@ function modelBlock(modelSrc, height) {
 }
 
 function popupHtml(name, id, modelSrc) {
+    // Проверяем, является ли место гостиницей
+    const isHotel = name.toLowerCase().includes('гостиница');
+
+    // Если это гостиница, не показываем 3D-модель
+    if (isHotel) {
+        return `<div class="popup-title">${esc(name)}</div>
+            <a class="popup-link" href="#place/${id}">Подробнее о месте ↗</a>`;
+    }
+
+    // Для остальных мест оставляем как было
     return `<div class="popup-title">${esc(name)}</div>
         ${modelBlock(modelSrc, 120)}
         <a class="popup-link" href="#place/${id}">Подробнее о месте ↗</a>`;
@@ -433,7 +461,11 @@ async function drawAllPlacesOnMap() {
     const bounds = [];
     places.filter(p => p.latitude != null && p.longitude != null).forEach(place => {
         const ll = [Number(place.latitude), Number(place.longitude)];
-        L.marker(ll, { icon: pinIcon(place.name) }).bindPopup(popupHtml(place.name, place.id, place.model_3d), { minWidth: 240 }).addTo(placesLayer);
+        
+        const isHotel = place.name.toLowerCase().includes('гостиница');
+        const icon = isHotel ? hotelIcon(place.name) : pinIcon(place.name);
+
+        L.marker(ll, { icon: icon }).bindPopup(popupHtml(place.name, place.id, place.model_3d), { minWidth: 240 }).addTo(placesLayer);
         bounds.push(ll);
     });
     placesLayer.addTo(map);
@@ -551,6 +583,53 @@ async function loadMapSidebar() {
         listContainer.appendChild(card);
     });
 }
+
+// ---------- ПОСТРОЕНИЕ МАРШРУТА ОТ ГОСТИНИЦЫ ----------
+window.buildRouteFromHotel = async function(routeId) {
+    window.location.hash = '#map';
+    
+    setTimeout(async () => {
+        const route = await fetchRouteDetails(routeId);
+        if (!route || !route.points || route.points.length === 0) return;
+
+        const places = await fetchPlaces();
+        const hotel = places.find(p => p.name.toLowerCase().includes('гостиница'));
+
+        if (!hotel) {
+            alert('Гостиница не найдена в базе данных!');
+            return;
+        }
+
+        const latlngs = [[Number(hotel.latitude), Number(hotel.longitude)]];
+        route.points.forEach(p => {
+            latlngs.push([Number(p.latitude), Number(p.longitude)]);
+        });
+
+        clearActiveRoute();
+        if (placesLayer) mapInstance.removeLayer(placesLayer);
+        
+        routeLayer = L.layerGroup();
+
+        L.polyline([latlngs[0], latlngs[1]], { 
+            color: '#ff4500', weight: 4, dashArray: '5, 10' 
+        }).addTo(routeLayer);
+
+        L.polyline(latlngs.slice(1), { 
+            color: '#252525', weight: 3, dashArray: '8, 8' 
+        }).addTo(routeLayer);
+
+        L.marker(latlngs[0], { icon: hotelIcon('Гостиница') }).addTo(routeLayer);
+
+        route.points.forEach((p, i) => {
+            L.marker(latlngs[i + 1], { icon: pinIcon(p.name, i + 1) }).addTo(routeLayer);
+        });
+
+        routeLayer.addTo(mapInstance);
+        mapInstance.fitBounds(latlngs, { padding: [70, 70], maxZoom: 16 });
+        
+        setCrumb(`Коломна / ${route.name} (от гостиницы)`);
+    }, 500);
+};
 
 // ---------- РОУТИНГ ----------
 function setActiveNav(name) {
