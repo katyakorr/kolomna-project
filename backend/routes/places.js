@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { withModel } = require('../models');
 
 // Получить все достопримечательности
 router.get('/', async (req, res) => {
@@ -12,7 +13,7 @@ router.get('/', async (req, res) => {
       ORDER BY id
     `);
 
-    res.json(result.rows);
+    res.json(result.rows.map(withModel));
   } catch (error) {
     console.error('Ошибка получения достопримечательностей:', error);
     res.status(500).json({
@@ -37,7 +38,7 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    res.json(result.rows[0]);
+    res.json(withModel(result.rows[0]));
   } catch (error) {
     console.error('Ошибка получения достопримечательности:', error);
     res.status(500).json({

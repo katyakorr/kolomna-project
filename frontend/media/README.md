@@ -1,40 +1,30 @@
-# Папка для фотографий и 3D-моделей
+# Медиа сайта
 
-Сюда кладём файлы — Express раздаёт эту папку как есть (`/media/...`). В базе данных хранятся только пути.
+Фотографии мест и маршрутов находятся в `photos/`. Их пути берутся из PostgreSQL.
 
-## Правила
-- **Фото:** JPG или WebP, ширина 1600 px, до 300 КБ на файл (сжать можно на squoosh.app).
-- **3D-модели:** формат GLB (glTF), до 5 МБ на файл (сжать можно на gltf.report).
-- Названия файлов — латиницей, строчными, без пробелов (как в таблице ниже).
-- Сайт сам подхватывает файл по пути из БД. Нет файла — показывается заглушка.
+Модели хранятся в `artifacts/3d/` и доступны через Express по адресам ниже. Не копируйте GLB сюда: соответствия и разрешённые файлы заданы в `backend/models.js`.
 
-## Общие картинки сайта (необязательно)
-`media/hero.jpg` — главное фото на главной; `media/about-1.jpg` и `media/about-2.jpg` — фото в блоке «О городе».
+`model-posters/` содержит уменьшенные WebP-превью для сайта. Исходные ракурсы остаются рядом с моделями. Пересборка: `python3 scripts/prepare-model-posters.py` (Pillow).
 
-## Какой файл как называть
-| id | Место | Фото | 3D |
-|---|---|---|---|
-| 1 | Пятницкие ворота | `photos/pyatnitskie-vorota.jpg` | `models/pyatnitskie-vorota.glb` |
-| 2 | Маринкина (Коломенская) башня | `photos/marinkina-bashnya.jpg` | `models/marinkina-bashnya.glb` |
-| 3 | Грановитая башня | `photos/granovitaya-bashnya.jpg` | `models/granovitaya-bashnya.glb` |
-| 8 | Стены Коломенского кремля | `photos/steny-kremlya.jpg` | `models/steny-kremlya.glb` |
-| 9 | Успенский кафедральный собор | `photos/uspenskiy-sobor.jpg` | `models/uspenskiy-sobor.glb` |
-| 10 | Успенская шатровая звонница | `photos/zvonnitsa.jpg` | `models/zvonnitsa.glb` |
-| 15 | Свято-Троицкий Ново-Голутвин монастырь | `photos/novo-golutvin.jpg` | `models/novo-golutvin.glb` |
-| 16 | Успенский Брусенский монастырь | `photos/brusenskiy-monastyr.jpg` | `models/brusenskiy-monastyr.glb` |
-| 17 | Храм Иоанна Предтечи на Городище | `photos/ioanna-predtechi.jpg` | `models/ioanna-predtechi.glb` |
-| 21 | Усадьба купцов Лажечниковых | `photos/lazhechnikovy.jpg` | `models/lazhechnikovy.glb` |
-| 25 | Коломенская картинная галерея «Дом Озерова» | `photos/dom-ozerova.jpg` | `models/dom-ozerova.glb` |
-| 27 | Музей «Калачная» | `photos/kalachnaya.jpg` | `models/kalachnaya.glb` |
-| 28 | Музейная фабрика пастилы | `photos/pastila.jpg` | `models/pastila.glb` |
-| 31 | Памятник Дмитрию Донскому | `photos/dmitriy-donskoy.jpg` | `models/dmitriy-donskoy.glb` |
-| 34 | Соборная площадь | `photos/sobornaya-ploschad.jpg` | `models/sobornaya-ploschad.glb` |
-| 35 | Дом с мезонином | `photos/dom-s-mezoninom.jpg` | `models/dom-s-mezoninom.glb` |
-| 36 | Литературное кафе «Лажечников» | `photos/kafe-lazhechnikov.jpg` | `models/kafe-lazhechnikov.glb` |
-| 38 | Кафе «Лайт» | `photos/kafe-layt.jpg` | `models/kafe-layt.glb` |
-| 39 | Кафе-кондитерская «Хороший пирог» | `photos/horoshiy-pirog.jpg` | `models/horoshiy-pirog.glb` |
+| Модель | Публичный GLB |
+|---|---|
+| Музей «Коломенская пастила» | `/media/models/kolomenskaya-pastila.glb` |
+| Музейная фабрика пастилы | `/media/models/pastila-factory.glb` |
+| Маринкина башня и стена кремля | `/media/models/marinkina-tower.glb` |
+| Музей «Калачная» | `/media/models/kalachnaya.glb` |
+| Музей «Кузнечная слобода» | `/media/models/kuznechnaya-sloboda.glb` |
+| Старо-Голутвин монастырь | `/media/models/staro-golutvin.glb` |
+| Музей любимой игрушки | `/media/models/toy-museum.glb` |
+| Шкала уровней паводковых вод | `/media/models/flood-scale.glb` |
+| Музей «Дом самовара» | `/media/models/dom-samovara.glb` |
+| Музей-резиденция «Арткоммуналка» | `/media/models/artkommunalka.glb` |
+| Музей органической культуры | `/media/models/organic-culture.glb` |
+| Музей «Коломенский патефон» | `/media/models/kolomensky-patefon.glb` |
+| Усадьба купцов Лажечниковых | `/media/models/lazhechnikov-estate.glb` |
+| Музей мыла «Душистыя радости» | `/media/models/dushistye-radosti.glb` |
+| Бистро «Рульки вверх» | `/media/models/rulki-vverh.glb` |
+| Гостиница «Коломна» | `/media/models/kolomna-hotel.glb` |
 
-После добавления файлов выполните `sql/update_media.sql` в консоли Aiven.
+Кофейня при «Калачной» использует модель музея. Кофейня в Посаде пока без 3D. API сам возвращает актуальные пути, включая версию для обновления кеша.
 
-## Лицензии
-Берите свои фотографии или снимки с Wikimedia Commons / Unsplash и указывайте автора, если лицензия требует.
+Для изображений из внешних источников соблюдайте условия лицензии и указывайте авторство, если это требуется.

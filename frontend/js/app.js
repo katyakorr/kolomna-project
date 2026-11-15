@@ -299,10 +299,9 @@ async function renderPlacePage(id) {
             ${media('Главная фотография места', 360, placeImage(place))}
         </section>
 
-        <!-- Если это НЕ гостиница, показываем все блоки ниже -->
-        ${!isHotel ? `
+        ${!isHotel || place.model_3d ? `
         <div class="place-body">
-            <section class="article-section">
+            ${!isHotel ? `<section class="article-section">
                 <div class="eyebrow">Знакомство с местом</div>
                 <h2>История и особенности</h2>
                 
@@ -320,23 +319,13 @@ async function renderPlacePage(id) {
                     </div>
                 </div>
                 ` : ''}
-            </section>
+            </section>` : ''}
 
-            <section class="article-section">
+            ${place.model_3d ? `<section class="article-section">
                 <div class="eyebrow">Рассмотреть поближе</div>
                 <h2>3D-модель</h2>
-                ${place.model_3d ? modelBlock(place.model_3d, 350) : `<div class="model-large">
-                    <div>
-                        <div class="model-symbol">3D</div>
-                        <small>Место для модели достопримечательности</small>
-                    </div>
-                    <div class="model-actions">
-                        <button type="button">Вращение</button>
-                        <button type="button">Сбросить вид</button>
-                    </div>
-                </div>`}
-                <p class="model-note">${place.model_3d ? 'Вращайте модель и приближайте её жестами или колесом мыши.' : 'Заглушка модели. В готовой версии: вращение и приближение.'}</p>
-            </section>
+                ${modelBlock(place, 430)}
+            </section>` : ''}
         </div>
         ` : ''}
 
@@ -410,26 +399,9 @@ function hotelIcon(label) {
     });
 }
 
-function modelBlock(modelSrc, height) {
-    if (modelSrc) {
-        return `<model-viewer src="${esc(modelSrc)}" camera-controls auto-rotate touch-action="pan-y" style="width:100%;height:${height}px;background:#f4f4f2"></model-viewer>`;
-    }
-    return `<div class="popup-3d" style="height:${height}px"><b>3D</b><span>Модель появится позже</span></div>`;
-}
-
-function popupHtml(name, id, modelSrc) {
-    // Проверяем, является ли место гостиницей
-    const isHotel = name.toLowerCase().includes('гостиница');
-
-    // Если это гостиница, не показываем 3D-модель
-    if (isHotel) {
-        return `<div class="popup-title">${esc(name)}</div>
-            <a class="popup-link" href="#place/${id}">Подробнее о месте ↗</a>`;
-    }
-
-    // Для остальных мест оставляем как было
+function popupHtml(name, id, place) {
     return `<div class="popup-title">${esc(name)}</div>
-        ${modelBlock(modelSrc, 120)}
+        ${modelBlock(place, 200, true)}
         <a class="popup-link" href="#place/${id}">Подробнее о месте ↗</a>`;
 }
 
@@ -465,7 +437,7 @@ async function drawAllPlacesOnMap() {
         const isHotel = place.name.toLowerCase().includes('гостиница');
         const icon = isHotel ? hotelIcon(place.name) : pinIcon(place.name);
 
-        L.marker(ll, { icon: icon }).bindPopup(popupHtml(place.name, place.id, place.model_3d), { minWidth: 240 }).addTo(placesLayer);
+        L.marker(ll, { icon: icon }).bindPopup(popupHtml(place.name, place.id, place), { minWidth: 260, maxWidth: 290 }).addTo(placesLayer);
         bounds.push(ll);
     });
     placesLayer.addTo(map);
@@ -511,7 +483,7 @@ async function showRouteOnMap(routeId) {
         }
     });
     detail.points.forEach((p, i) => {
-        L.marker(latlngs[i], { icon: pinIcon(p.name, i + 1) }).bindPopup(popupHtml(p.name, p.place_id, p.place && p.place.model_3d), { minWidth: 240 }).addTo(routeLayer);
+        L.marker(latlngs[i], { icon: pinIcon(p.name, i + 1) }).bindPopup(popupHtml(p.name, p.place_id, p.place), { minWidth: 260, maxWidth: 290 }).addTo(routeLayer);
     });
     routeLayer.addTo(mapInstance);
     mapInstance.fitBounds(latlngs, { padding: [70, 70], maxZoom: 16 });
@@ -618,10 +590,12 @@ window.buildRouteFromHotel = async function(routeId) {
             color: '#252525', weight: 3, dashArray: '8, 8' 
         }).addTo(routeLayer);
 
-        L.marker(latlngs[0], { icon: hotelIcon('Гостиница') }).addTo(routeLayer);
+        L.marker(latlngs[0], { icon: hotelIcon('Гостиница') })
+            .bindPopup(popupHtml(hotel.name, hotel.id, hotel), { minWidth: 260, maxWidth: 290 }).addTo(routeLayer);
 
         route.points.forEach((p, i) => {
-            L.marker(latlngs[i + 1], { icon: pinIcon(p.name, i + 1) }).addTo(routeLayer);
+            L.marker(latlngs[i + 1], { icon: pinIcon(p.name, i + 1) })
+                .bindPopup(popupHtml(p.name, p.place_id, p.place), { minWidth: 260, maxWidth: 290 }).addTo(routeLayer);
         });
 
         routeLayer.addTo(mapInstance);
