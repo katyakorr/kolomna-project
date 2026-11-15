@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { withModel } = require('../models');
 
 // Получить все маршруты
 router.get('/', async (req, res) => {
@@ -26,7 +27,8 @@ router.get('/:id', async (req, res) => {
     // 2. Получаем точки маршрута
     const pointsResult = await pool.query(`
       SELECT rp.order_number, rp.arrival_time, rp.stay_minutes, 
-             p.id as place_id, p.name, p.latitude, p.longitude
+             p.id as place_id, p.name, p.latitude, p.longitude,
+             to_jsonb(p) AS place
       FROM route_point rp
       JOIN place p ON rp.place_id = p.id
       WHERE rp.route_id = $1
@@ -34,7 +36,7 @@ router.get('/:id', async (req, res) => {
     `, [id]);
 
     const route = routeResult.rows[0];
-    route.points = pointsResult.rows;
+    route.points = pointsResult.rows.map(point => ({ ...point, place: withModel(point.place) }));
 
     // 3. СЧИТАЕМ ОБЩЕЕ ВРЕМЯ: суммируем все stay_minutes
     let total = 0;
