@@ -31,11 +31,19 @@ test('Pages publishes only public assets, with every data URL valid under the re
   assert.equal(summary.routes, 5);
   assert.equal(summary.models, 16);
   const files = fs.readdirSync(output, { recursive:true }).map(String);
-  assert.ok(!files.some(file => /(^|[/\\])(?:\.env|backend|\.local-backups|node_modules)([/\\]|$)|\.(?:blend|sql|png)$/.test(file)));
+  assert.ok(!files.some(file => /(^|[/\\])(?:\.env|backend|\.local-backups|node_modules)([/\\]|$)|\.(?:blend|sql)$/.test(file)));
   const html = await (await fetch(base)).text();
   assert.ok(html.indexOf('js/site-config.js') < html.indexOf('js/api.js'));
   const data = await (await fetch(new URL('data/site.json', base))).json();
   const urls = new Set(['vendor/model-viewer.min.js', 'js/site-config.js']);
+  // The redesign must work when Pages serves it under a repository prefix.
+  const cssUrl = new URL('css/style.css', base);
+  const css = await (await fetch(cssUrl)).text();
+  for (const match of css.matchAll(/url\(['"]?([^)'"]+)['"]?\)/g)) {
+    const asset = new URL(match[1], cssUrl);
+    assert.ok(asset.href.startsWith(base), asset.href);
+    assert.equal((await fetch(asset, { method:'HEAD' })).status, 200, asset.href);
+  }
   for (const item of [...data.places, ...data.routes]) {
     for (const key of ['image_url', 'image_2_url', 'model_3d', 'model_poster']) {
       if (item[key]) { assert.ok(!item[key].startsWith('/'), item[key]); urls.add(item[key]); }
@@ -49,8 +57,8 @@ test('Pages publishes only public assets, with every data URL valid under the re
 test('the static client filters and opens places/routes using one snapshot and no backend', async () => {
   const requests = [];
   const context = vm.createContext({
-    window:{ SITE_CONFIG:{ dataMode:'static' } }, location:{ protocol:'https:' }, console, setTimeout,
-    fetch: url => { requests.push(url); return fetch(new URL(url, base)); }
+    window:{ SITE_CONFIG:{ dataMode:'static' } }, location:{ protocol:'https:' }, console, setTimeout, AbortSignal,
+    fetch: (url, options) => { requests.push(url); return fetch(new URL(url, base), options); }
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/js/api.js'), 'utf8'), context);
   const places = await context.fetchPlaces();
@@ -64,6 +72,8 @@ test('the static client filters and opens places/routes using one snapshot and n
   assert.equal(await context.fetchPlaceDetails(999), null);
   const routes = await context.fetchRoutes();
   assert.equal(routes.length, 5);
+  assert.deepEqual(Array.from(await context.fetchRoutes('summer'), route => route.id), [2]);
+  assert.equal((await fetch(new URL('hotel-qr/kolomna.svg', base))).status, 200);
   const route = await context.fetchRouteDetails(routes[0].id);
   assert.ok(route.points.length > 0);
   assert.ok(route.points.every(point => point.place.name && Number.isFinite(point.latitude)));
