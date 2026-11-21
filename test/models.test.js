@@ -9,17 +9,25 @@ const { parseDump, copyValue } = require('../scripts/import-project-data');
 const dump = fs.readFileSync(path.join(__dirname, '../kolomnabackup.sql'), 'utf8');
 const rows = dump.split('COPY public.place (')[1].split('\n').slice(1);
 const places = [];
+const types = new Map(parseDump(dump).place_type.rows.map(type => [Number(type.id), type.name]));
 for (const line of rows) {
   if (line === '\\.') break;
   const [id, name, description, facts, address, latitude, longitude, model_3d, place_type_id, image_url, image_2_url] = line.split('\t');
-  places.push({ id: Number(id), name, description, facts, address, latitude, longitude, model_3d, place_type_id, image_url, image_2_url });
+  places.push({ id: Number(id), name, description, facts, address, latitude, longitude, model_3d, place_type_id, image_url, image_2_url, type_name: types.get(Number(place_type_id)) });
 }
 
 // Test HTTP routes against the checked-in data, never a developer's cloud DB.
+let routeListQueries = 0;
 const fakePool = { query: async (sql, params) => {
   if (sql.includes('FROM route_point')) return { rows: places.slice(0, 3).map((place, i) => ({ place_id: place.id, name: place.name, latitude: place.latitude, longitude: place.longitude, order_number: i + 1, stay_minutes: 10, place })) };
+  if (sql.includes('GROUP BY')) {
+    routeListQueries++;
+    return { rows: [{ id: 1, season: 'Летний', length_km: '2.00' }, { id: 2, season: 'Всесезонный', length_km: '3.00' }] };
+  }
   if (sql.includes('FROM route')) return { rows: params && Number(params[0]) !== 1 ? [] : [{ id: 1, name: 'Тестовая прогулка' }] };
-  return { rows: params ? places.filter(place => place.id === Number(params[0])) : places };
+  if (sql.includes('p.id = $1')) return { rows: places.filter(place => place.id === Number(params[0])) };
+  const [type] = params;
+  return { rows: places.filter(place => !type || place.type_name?.toLowerCase() === type || place.place_type_id === type) };
 } };
 const dbFile = require.resolve('../backend/db');
 require.cache[dbFile] = { id: dbFile, filename: dbFile, loaded: true, exports: fakePool };
@@ -68,6 +76,21 @@ test('all HTTP place endpoints and route stops include matching model metadata',
   assert.equal(route.points.length, 3); assert.equal(route.total_minutes, 30);
   for (const stop of route.points) assert.equal(stop.place.model_3d, withModel(stop.place).model_3d);
   assert.equal((await fetch(`${origin}/api/places/999`)).status, 404);
+});
+
+test('place filter, season filter and concurrent route requests agree with the API contract', async () => {
+  const get = async path => (await fetch(origin + path)).json();
+  const museums = await get('/api/places?category=museum');
+  assert.equal(museums.length, 11);
+  assert.ok(museums.every(place => place.type_name === 'Музей' && typeof place.latitude === 'number'));
+  const [all, summer, winter] = await Promise.all([
+    get('/api/routes'), get('/api/routes?season=summer'), get('/api/routes?season=winter')
+  ]);
+  assert.equal(all.length, 2);
+  assert.deepEqual(summer, [{ id: 1, season: 'Летний', length_km: 2 }]);
+  assert.deepEqual(winter, []);
+  assert.equal(routeListQueries, 1);
+  assert.match((await fetch(origin + '/hotel-qr/kolomna.svg')).headers.get('content-type'), /image\/svg\+xml/);
 });
 
 test('all models and compact posters are served, with GLB type, ranges and cache revalidation', async () => {

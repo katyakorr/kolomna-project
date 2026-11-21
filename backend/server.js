@@ -7,6 +7,8 @@ require('dotenv').config();
 const placesRouter = require('./routes/places');
 const routesRouter = require('./routes/routes');
 const { bySlug } = require('./models');
+const vendorAssets = require('./vendor-assets');
+const { qrPath, hotelQr } = require('./hotel-qr');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,6 +42,10 @@ app.get('/media/models/:slug.glb', (req, res) => {
 app.get('/vendor/model-viewer.min.js', (req, res) => {
   res.sendFile(require.resolve('@google/model-viewer/dist/model-viewer.min.js'), { maxAge: '1d' });
 });
+for (const [name, file] of Object.entries(vendorAssets)) {
+  app.get(`/vendor/${name}`, (req, res) => res.sendFile(file, { maxAge: '1d' }));
+}
+app.get(`/${qrPath}`, (req, res) => res.type('image/svg+xml').send(hotelQr()));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Запуск сервера
