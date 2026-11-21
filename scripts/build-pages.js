@@ -1,7 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseDump } = require('./import-project-data');
-const { assets, withModel } = require('../backend/models');
+const { assets } = require('../backend/models');
+const { placeData } = require('../backend/site-data');
+const { qrPath, hotelQr } = require('../backend/hotel-qr');
+const vendorAssets = require('../backend/vendor-assets');
 
 const ROOT = path.join(__dirname, '..');
 const FRONTEND = path.join(ROOT, 'frontend');
@@ -14,12 +17,10 @@ function createSnapshot() {
     const types = new Map(tables.place_type.rows.map(row => [row.id, row.name]));
     const categories = new Map(tables.route_category.rows.map(row => [row.id, row.name]));
     const places = tables.place.rows.map(row => {
-        const place = withModel(row);
+        const place = placeData({ ...row, type_name: types.get(row.place_type_id) || null });
         return {
             ...place, id:Number(place.id), place_type_id:numeric(place.place_type_id),
             latitude:numeric(place.latitude), longitude:numeric(place.longitude),
-            type_name:types.get(row.place_type_id) || null,
-            is_partner:/кафе.*партн[её]р/i.test(types.get(row.place_type_id) || ''),
             image_url:relativeMedia(place.image_url), image_2_url:relativeMedia(place.image_2_url),
             model_3d:relativeMedia(place.model_3d), model_poster:relativeMedia(place.model_poster)
         };
@@ -58,9 +59,13 @@ function buildPages(outDir = path.join(ROOT, 'dist')) {
         fs.writeFileSync(target, content);
     }
     function copy(source, file) { write(file, fs.readFileSync(source)); }
-    const images = new Set(['media/hero.jpg', 'media/about-1.jpg', 'media/about-2.jpg']);
+    const images = new Set(['media/hero.jpg', 'media/about-1.jpg', 'media/about-2.jpg',
+        'media/kremlin-sunset.webp', 'media/routes-background.webp']);
     for (const place of snapshot.places) for (const image of [place.image_url, place.image_2_url]) if (image) images.add(image);
     for (const route of snapshot.routes) if (route.image_url) images.add(route.image_url);
+    const font = 'fonts/Playfair/Playfair-VariableFont_opsz,wdth,wght.ttf';
+    copy(path.join(FRONTEND, font), font);
+    copy(path.join(FRONTEND, 'fonts/Playfair/OFL.txt'), 'fonts/Playfair/OFL.txt');
     for (const image of images) {
         if (!image.startsWith('media/') || image.includes('..') || image.includes('\\')) throw new Error(`Invalid image path: ${image}`);
         copy(path.join(FRONTEND, image), image);
@@ -71,7 +76,9 @@ function buildPages(outDir = path.join(ROOT, 'dist')) {
     write('index.html', html);
     write('js/site-config.js', 'window.SITE_CONFIG = { dataMode: "static" };\n');
     write('data/site.json', JSON.stringify(snapshot));
+    write(qrPath, hotelQr());
     write('.nojekyll', '');
+    for (const [name, file] of Object.entries(vendorAssets)) copy(file, `vendor/${name}`);
     for (const asset of assets) {
         copy(asset.file, `media/models/${asset.slug}.glb`);
         copy(asset.posterFile, `media/model-posters/${asset.slug}.webp`);
